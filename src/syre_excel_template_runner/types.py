@@ -25,7 +25,7 @@ ColumnId = Enum("ColumnId", ["HEADER", "INDEX"])
 """Identifier kind for columns.
 
 HEADER: Select based on header labels.
-INDEX: Select by column index. e.g. 0 -> A, 1 -> B
+INDEX: Select by column index (0-based). e.g. 0 -> A, 1 -> B
 """
 
 InputColumnsRangeType = Enum(

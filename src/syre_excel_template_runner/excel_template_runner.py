@@ -25,86 +25,13 @@ from .types import (
 )
 
 
-def selection_type(selector: ColumnSelection) -> ColumnId:
-    """Determines the type of selector.
-
-    Args: s
-        selector (ColumnSelection): Selector to classify.
-
-    Raises:
-        ValueError: If the selector is invalid.
-
-    Returns:
-        SelectionType:
-    """
-    if type(selector) is not list:
-        raise ValueError("Selector must be a list")
-
-    if len(selector) == 0:
-        raise ValueError("Empty selector")
-
-    rep = selector[0]
-    if type(rep) is int:
-        return ColumnId.INDEX
-    elif type(rep) is list:
-        if len(rep) == 0:
-            raise ValueError("Empty selector")
-
-        if type(rep[0]) is str:
-            return ColumnId.HEADER
-        else:
-            raise ValueError("Invalid selector")
-    else:
-        raise ValueError("Invalid selector")
-
-
-def get_worksheet(workbook: xl.Workbook, sheet: WorksheetId) -> Worksheet:
-    """Get a worksheet from a workbook.
-
-    Args:
-        workbook (xl.Workbook):
-        sheet (Union[str, int]):
-
-    Raises:
-        ValueError: If worksheet is not found.
-
-    Returns:
-        xl.worksheet.worksheet.Worksheet:
-    """
-    if type(sheet) is int and sheet < (workbook.sheets):
-        return workbook.worksheets[sheet]
-    elif type(sheet) is str and sheet in workbook:
-        return workbook[sheet]
-    else:
-        raise ValueError("Invalid input worksheet")
-
-
-def canonicalize_db_root_path(db: syre.Database) -> str:
-    """Canonicalizes teh database's root path.
-
-    Args:
-        db (syre.Database): Database
-
-    Returns:
-        str: Canonicalized root path of the database.
-    """
-    root_path = os.path.realpath(db._root_path)
-    if os.name == "nt":
-        # windows, ensure UNC
-        if not root_path.startswith(UNC_PATH):
-            root_path = UNC_PATH + path
-
-    return root_path
-
-
 def insert_data_from_excel(
     asset: syre.Asset,
     worksheet: Worksheet,
     data_worksheet: WorksheetId,
-    data_columns: ColumnSelection,
+    column_selection: ColumnSelection,
     header_action: HeaderAction,
     current_column: int,
-    data_headers: int = 0,
     skip_rows: int = 0,
     asset_path: Optional[str] = None,
 ):
@@ -114,10 +41,9 @@ def insert_data_from_excel(
         asset (syre.Asset): Asset representing the data resource.
         worksheet (Worksheet): Template worksheet in which to insert the data.
         data_worksheet (WorksheetId): Worksheet id containing the data.
-        data_columns (ColumnSelection): List of column headers or labels identifying the data to be copied into the template. [data]
+        column_selection (ColumnSelection): List of column headers or labels identifying the data to be copied into the template. [data]
         header_action (HeaderAction): How to label data. [template]
         current_column (int): Current column index of the template manipulation.
-        data_headers (int, optional): Number of headers in the data. Defaults to 0.
         skip_rows (int, optional): Number of rows to skip until the first header or data. Defaults to 0.
         asset_path (str): Relative path to the asset file.
             Used to label data if `data-label` is `HeaderAction.INSERT` or `HeaderAction.REPLACE`.
@@ -126,7 +52,7 @@ def insert_data_from_excel(
     asset_file_name = os.path.basename(asset.file)
     xl_model = formulas.ExcelModel().loads(asset.file).finish()
     calculated_data = xl_model.calculate()
-    input_wb = xl.load_workbook(asset.file, data_only=True)
+    input_wb = xl.load_workbook(asset.file)
 
     if isinstance(data_worksheet, str):
         input_ws = input_wb.get_sheet_by_name(data_worksheet)
@@ -135,43 +61,56 @@ def insert_data_from_excel(
     else:
         raise TypeError("Invalid `data_worksheet`")
 
+    current_column_excel = utils.index_to_excel(current_column)
     context_key = f"'[{asset_file_name}]{input_ws.title.upper()}'"
-    worksheet.insert_cols(current_column, len(data_columns))
-    for label in data_columns:
-        data_row_start = skip_rows + 1
+    worksheet.insert_cols(current_column_excel, len(column_selection))
+
+    selection_type = utils.selection_type(column_selection)
+    if selection_type is ColumnId.INDEX:
+        input_data = [
+            col
+            for idx, col in enumerate(input_ws.iter_cols())
+            if idx in column_selection
+        ]
+    elif selection_type is ColumnId.HEADER:
+        raise NotImplementedError()
+    else:
+        raise TypeError("Invalid column selection")
+
+    for input_column in input_data:
+        data_row_start = 1
         if (
             header_action is HeaderAction.INSERT
             or header_action is HeaderAction.REPLACE
         ):
-            worksheet.cell(row=1, column=current_column).value = asset_path
+            worksheet.cell(row=1, column=current_column_excel).value = asset_path
             data_row_start += 1
 
-        data_cells = input_ws[label]
         if header_action is HeaderAction.REPLACE:
-            data_cells = data_cells[data_headers:]
+            input_column = input_column[skip_rows:]
 
-        for row, data_cell in enumerate(data_cells, start=data_row_start):
-            template_cell = worksheet.cell(row=row, column=current_column)
-            if type(data_cell.value) is str:
-                tok = Tokenizer(data_cell.value)
+        for row, input_cell in enumerate(input_column, start=data_row_start):
+            template_cell = worksheet.cell(row=row, column=current_column_excel)
+            if type(input_cell.value) is str:
+                tok = Tokenizer(input_cell.value)
                 tokens = tok.items
                 if len(tokens) == 0:
                     continue
                 elif tokens[0].type == Token.LITERAL:
-                    template_cell.value = data_cell.value
+                    template_cell.value = input_cell.value
                 else:
                     calculated_cell = calculated_data.get(
-                        f"{context_key}!{data_cell.coordinate}"
+                        f"{context_key}!{input_cell.coordinate}"
                     )
                     template_cell.value = calculated_cell.value[0, 0]
             else:
-                template_cell.value = data_cell.value
+                template_cell.value = input_cell.value
 
 
 def insert_data_from_csv(
     asset: syre.Asset,
     worksheet: Worksheet,
-    data_selector: ColumnSelection,
+    columns_selection: ColumnSelection,
     header_action: HeaderAction,
     current_column: int,
     skip_rows: int = 0,
@@ -183,7 +122,7 @@ def insert_data_from_csv(
     Args:
         asset (syre.Asset): Asset representing the data resource.
         worksheet (Worksheet): Template worksheet in which to insert the data.
-        data_selector (ColumnSelection): List of column headers or labels identifying the data to be copied into the template. [data]
+        column_selection (ColumnSelection): List of column headers or labels identifying the data to be copied into the template. [data]
         header_action (HeaderAction): How to construct data headers. [template]
         current_column (int): Current column index of the template manipulation.
         skip_rows (int, optional): Number of rows to skip until the first header or data. Defaults to 0.
@@ -192,40 +131,43 @@ def insert_data_from_csv(
             Used to label data if `data-label` is `HeaderAction.INSERT` or `HeaderAction.REPLACE`.
             Defaults to None.
     """
-    data_selector_type = selection_type(data_selector)
     data = pandas.read_csv(asset.file, skiprows=skip_rows, comment=comment)
+    data_selector_type = utils.selection_type(columns_selection)
     if data_selector_type is ColumnId.INDEX:
-        df = data.iloc[:, data_selector]
+        df = data.iloc[:, columns_selection]
     elif data_selector_type is ColumnId.HEADER:
         raise NotImplementedError("todo")
         # df = data.loc[:, data_selector]
     else:
         raise RuntimeError("Invalid data selector")
 
-    worksheet.insert_cols(current_column, len(data_selector))
+    current_column_excel = utils.index_to_excel(current_column)
+    worksheet.insert_cols(current_column_excel, len(columns_selection))
     for col_label, col in df.items():
         data_row_start = 1
         if (
             header_action is HeaderAction.INSERT
             or header_action is HeaderAction.REPLACE
         ):
-            worksheet.cell(row=1, column=current_column).value = asset_path
+            worksheet.cell(row=data_row_start, column=current_column_excel).value = (
+                asset_path
+            )
             data_row_start += 1
 
         if header_action is not HeaderAction.REPLACE:
             if type(col_label) is tuple:
                 for row, label in enumerate(col_label, start=data_row_start):
-                    worksheet.cell(row=row, column=current_column).value = label
+                    worksheet.cell(row=row, column=current_column_excel).value = label
 
                 data_row_start += len(col_label)
             else:
-                worksheet.cell(row=data_row_start, column=current_column).value = (
-                    col_label
-                )
+                worksheet.cell(
+                    row=data_row_start, column=current_column_excel
+                ).value = col_label
                 data_row_start += 1
 
         for row, value in enumerate(col, start=data_row_start):
-            worksheet.cell(row=row, column=current_column, value=value)
+            worksheet.cell(row=row, column=current_column_excel, value=value)
 
 
 def translate_tokenizer_formula(
@@ -253,6 +195,8 @@ def translate_tokenizer_formula(
     for token in tokenizer.items:
         if token.type == Token.OPERAND and token.subtype == Token.RANGE:
             col_start, _, col_end, _ = xl_utils.range_boundaries(token.value)
+            col_start = utils.excel_to_index(col_start)
+            col_end = utils.excel_to_index(col_end)
             if col_end == replace_range[1]:
                 # expand range to include new data
                 formula_range = token.value.split(":")
@@ -265,7 +209,6 @@ def translate_tokenizer_formula(
                         formula_range[1], column_shift
                     )
                     token.value = ":".join(formula_range)
-
                 else:
                     raise ValueError(f"Invalid range `{token.value}`")
 
@@ -350,7 +293,6 @@ def main(
     output_path: str,
     data_format_args: DataFormatArgs = {},
     asset_filter: AssetFilter = {},
-    data_headers: int = 0,
     output_properties: AssetProperties = {},
 ):
     """Use an Excel file as a template.
@@ -358,14 +300,13 @@ def main(
     Args:
         template_path (str): Aboslute path to the Excel template.
         worksheet (WorksheetId): Name or index of the worksheet. [template]
-        replace_range (int, int): Column index range to replace in the template. [template]
+        replace_range (int, int): Column index range (0-based) to replace in the template. [template]
         data_format_type: (DataFormatType): Type of data format to expect.
-        column_selection (ColumnSelection): List of column indexes or labels identifying the data to be copied into the template. [data]
+        column_selection (ColumnSelection): List of column indexes (0-based) or labels identifying the data to be copied into the template. [data]
         header_action (HeaderAction): How to modify data headers when inserting.
         output_path (str): Relative path to the saved output file.
         data_format_args (DataFormatArgs): Arguments relevant for the expected data format.
         asset_filter (AssetFilter): Filter to search for input data.
-        data_headers (int, optional): Number of headers in the data. Defaults to 0.
         output_properties (AssetProperties): Asset properties assigned to the output Asset. Defaults to {}.
 
     Raises:
@@ -377,10 +318,10 @@ def main(
 
     db = syre.Database()
     template = xl.load_workbook(filename=template_path)
-    ws = get_worksheet(template, worksheet)
+    ws = utils.get_worksheet(template, worksheet)
 
     delete_columns_count = replace_range[1] - replace_range[0] + 1
-    ws.delete_cols(replace_range[0], delete_columns_count)
+    ws.delete_cols(utils.index_to_excel(replace_range[0]), delete_columns_count)
 
     assets = db.find_assets(**asset_filter)
     if len(assets) == 0:
@@ -389,7 +330,7 @@ def main(
     if header_action is HeaderAction.INSERT:
         ws.insert_rows(0)
 
-    db_root_path = canonicalize_db_root_path(db)
+    db_root_path = utils.canonicalize_db_root_path(db)
     current_col = replace_range[0]
     if data_format_type is DataFormatType.EXCEL_WORKBOOK:
         for asset in assets:
@@ -401,7 +342,6 @@ def main(
                 column_selection,
                 header_action,
                 current_col,
-                data_headers=data_headers,
                 skip_rows=data_format_args.skip_rows,
                 asset_path=asset_path,
             )

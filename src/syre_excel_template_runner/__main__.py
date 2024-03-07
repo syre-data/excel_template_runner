@@ -19,14 +19,14 @@ parser.add_argument(
     "--replace-start",
     type=int,
     required=True,
-    help="Start of the range where input data should replace.",
+    help="Start of the range (0-based index) where input data should replace.",
 )
 
 parser.add_argument(
     "--replace-end",
     type=int,
     required=True,
-    help="End of the range where data should replace.",
+    help="End of the range (0-based index) where data should replace.",
 )
 
 parser.add_argument(
@@ -44,7 +44,7 @@ parser.add_argument(
             Columns may be headers, labels, or indices.\
             For headers use the syntax h1l1,h1l2 h2l1,h2l2.\
             For labels use the syntax A B C.\
-            For indices use the syntax 1 2 3.",
+            For indices (0-based) use the syntax 0 1 2.",
 )
 
 parser.add_argument(
@@ -73,10 +73,6 @@ parser.add_argument(
 )
 
 # optional args
-parser.add_argument(
-    "--data-headers", type=int, default=0, help="How many headers are in the data."
-)
-
 parser.add_argument(
     "--skip-rows", type=int, default=0, help="How many rows to skip when reading data."
 )
@@ -110,6 +106,14 @@ parser.add_argument(
 
 # parse
 args = parser.parse_args()
+if args.replace_start < 0:
+    raise ValueError("`--replace-start` must be non-negative.")
+
+if args.replace_end < 0:
+    raise ValueError("`--replace-end` must be non-negative.")
+
+replace_range = (args.replace_start, args.replace_end)
+
 data_format_type = utils.parse_data_format_type_arg(args.data_format_type)
 if data_format_type is DataFormatType.SPREADSHEET:
     data_format_args = SpreadsheetDataArgs(
@@ -154,13 +158,12 @@ if args.output_metadata is not None:
 excel_template_runner.main(
     args.template,
     args.worksheet,
-    (args.replace_start + 1, args.replace_end + 1),  # account for 0 to 1 index offset
+    replace_range,
     data_format_type,
     data_columns,
     header_action,
     args.output,
     data_format_args=data_format_args,
     asset_filter=asset_filter,
-    data_headers=args.data_headers,
     output_properties=output_properties,
 )
