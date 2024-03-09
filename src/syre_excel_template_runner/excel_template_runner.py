@@ -201,12 +201,12 @@ def translate_tokenizer_formula(
                 # expand range to include new data
                 formula_range = token.value.split(":")
                 if len(formula_range) == 1:
-                    token.value = Translator.translate_col(
-                        formula_range[0], column_shift
+                    token.value = Translator.translate_range(
+                        formula_range[0], redelta=0, cdelta=column_shift
                     )
                 elif len(formula_range) == 2:
-                    formula_range[1] = Translator.translate_col(
-                        formula_range[1], column_shift
+                    formula_range[1] = Translator.translate_range(
+                        formula_range[1], rdelta=0, cdelta=column_shift
                     )
                     token.value = ":".join(formula_range)
                 else:
@@ -222,7 +222,9 @@ def translate_tokenizer_formula(
                 if len(formula_range) == 1:
                     if replace_range[0] <= col_start <= insertion_break_column:
                         try:
-                            token.value = Translator.translate_row(formula_range[0], 1)
+                            token.value = Translator.translate_range(
+                                formula_range[0], rdelta=1, cdelta=0
+                            )
                         except ValueError:
                             pass
                 elif len(formula_range) == 2:
@@ -231,7 +233,9 @@ def translate_tokenizer_formula(
                         and replace_range[0] <= col_end <= insertion_break_column
                     ):
                         try:
-                            token.value = Translator.translate_row(token.value, 1)
+                            token.value = Translator.translate_range(
+                                token.value, rdelta=1, cdelta=0
+                            )
                         except ValueError:
                             pass
                 else:
