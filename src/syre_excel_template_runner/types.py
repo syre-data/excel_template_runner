@@ -5,8 +5,6 @@ import openpyxl
 import openpyxl.worksheet.worksheet
 from syre import _LEGACY_
 
-UNC_PATH = "\\\\?\\"
-
 DataFormatType = Enum("DataFormatType", ["SPREADSHEET", "EXCEL_WORKBOOK"])
 """Identifier for the type of input data to expect.
 
