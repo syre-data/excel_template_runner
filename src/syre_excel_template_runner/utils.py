@@ -16,6 +16,9 @@ from .types import (
 import syre
 
 
+UNC_PATH = "\\\\?\\"
+
+
 def parse_data_format_type_arg(arg: str) -> DataFormatType:
     """Parses a string in to a data format type.
 
