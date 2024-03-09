@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
   "pandas",
   "openpyxl",
-  "formulas @ git+https://github.com/bicarlsen/formulas.git",
+  "syre-formulas",
   "syre",
 ]
 
@@ -38,9 +38,6 @@ Source = "https://github.com/syre-data/excel-template-runner"
 
 [tool.hatch.version]
 path = "src/syre_excel_template_runner/__about__.py"
-
-[tool.hatch.metadata]
-allow-direct-references = true # NB: Needed for GitHub dependency.
 
 [tool.hatch.envs.default]
 dependencies = [

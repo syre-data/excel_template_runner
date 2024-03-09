@@ -16,6 +16,10 @@
 pip install syre-excel-template-runner
 ```
 
+## About
+Syre's Excel template runner allows [Syre](https://syre.ai) to use Excel workbooks as analysis templates for automation.
+See [our tutorials](https://syre.ai/start/excel-templates) for more info.
+
 ## License
 
 `syre-excel-template-runner` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
