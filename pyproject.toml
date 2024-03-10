@@ -65,7 +65,7 @@ dependencies = [
   "openpyxl~=3.1",
   "syre",
   "mypy>=1.0.0",
-  "formulas @ git+https://github.com/bicarlsen/formulas.git",
+  "syre-formulas",
 ]
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/syre_excel_template_runner tests}"
